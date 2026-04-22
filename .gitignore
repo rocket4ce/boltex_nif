@@ -22,3 +22,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 boltex_nif-*.tar
 
+# Rust native crate build artifacts.
+/native/*/target/
+

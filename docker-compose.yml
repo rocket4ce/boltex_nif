@@ -1,0 +1,27 @@
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: boltex_nif_neo4j
+    ports:
+      - "7687:7687"   # Bolt
+      - "7474:7474"   # HTTP browser
+    environment:
+      NEO4J_AUTH: neo4j/boltex_nif_pass
+      NEO4J_server_memory_pagecache_size: 256M
+      NEO4J_server_memory_heap_initial__size: 256M
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -q --spider http://localhost:7474 || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
