@@ -25,3 +25,8 @@ boltex_nif-*.tar
 # Rust native crate build artifacts.
 /native/*/target/
 
+# Local secrets — never commit.
+.env
+.env.*
+!.env.*.example
+
