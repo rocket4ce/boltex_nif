@@ -40,10 +40,10 @@ mix deps.get
 mix rustler_precompiled.download BoltexNif.Native --all --ignore-unavailable --print
 ```
 
-This creates `checksum-boltex_nif-X.Y.Z.exs` at the repo root. Commit it:
+This creates `checksum-Elixir.BoltexNif.Native.exs` at the repo root. Commit it:
 
 ```sh
-git add checksum-boltex_nif-X.Y.Z.exs
+git add checksum-Elixir.BoltexNif.Native.exs
 git commit -m "chore(release): checksum for vX.Y.Z"
 git push
 ```
