@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-23
+
+### Fixed
+- `BoltexNif.Native` looked for a checksum file named
+  `checksum-boltex_nif-<version>.exs` that `rustler_precompiled` never
+  generates — the real filename is `checksum-Elixir.BoltexNif.Native.exs`
+  (derived from the module name). The mismatch meant `force_build` was
+  always `true` when installing from Hex, so every consumer needed a Rust
+  toolchain despite the README promising the opposite. The lookup now
+  uses the correct name anchored at `__DIR__` (instead of the unreliable
+  `File.cwd!()`), so precompiled binaries are picked up transparently.
+  Thanks to the users who hit this on a fresh `mix deps.get`.
+
 ## [0.1.0] - 2026-04-22
 
 ### Added
@@ -49,5 +62,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Richer streaming (per-stream `fetch_size` override, streaming within a
   transaction).
 
-[Unreleased]: https://github.com/rocket4ce/boltex_nif/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rocket4ce/boltex_nif/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/rocket4ce/boltex_nif/releases/tag/v0.1.1
 [0.1.0]: https://github.com/rocket4ce/boltex_nif/releases/tag/v0.1.0

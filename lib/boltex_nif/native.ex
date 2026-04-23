@@ -3,16 +3,21 @@ defmodule BoltexNif.Native do
   # Low-level NIF interface. Do not use directly; prefer `BoltexNif`.
 
   # Keep `@version` in sync with `version:` in `mix.exs` — it's referenced by
-  # `base_url` (which points at the matching GitHub release) and by the
-  # `checksum-boltex_nif-<version>.exs` file shipped in the Hex tarball.
-  @version "0.1.0"
+  # `base_url` (which points at the matching GitHub release).
+  @version "0.1.1"
 
-  # When the checksum file is absent, we're almost certainly running inside
-  # the library repo itself (pre-release or contributor build) so compile the
-  # NIF from source rather than demanding a published artifact. Consumers
-  # installing from Hex always get the checksum file as part of the package.
+  # `rustler_precompiled` generates the checksum file named after the module
+  # (`checksum-Elixir.BoltexNif.Native.exs`) at the repo root. Anchor the
+  # lookup with `__DIR__` (this file lives at `lib/boltex_nif/native.ex`) so
+  # we resolve the repo root regardless of the current working directory —
+  # `File.cwd!()` is not reliable here because consumers compile the dep
+  # from their own project root. When the checksum file is absent we're
+  # almost certainly running inside the library repo itself (pre-release or
+  # contributor build) so compile the NIF from source rather than demanding
+  # a published artifact. Consumers installing from Hex always get the
+  # checksum file as part of the package.
   checksum_path =
-    Path.join(File.cwd!(), "checksum-boltex_nif-#{@version}.exs")
+    Path.join(__DIR__, "../../checksum-Elixir.BoltexNif.Native.exs")
 
   use RustlerPrecompiled,
     otp_app: :boltex_nif,

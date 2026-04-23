@@ -479,7 +479,7 @@ a draft GitHub Release. After publishing the draft, run:
 
 ```sh
 mix rustler_precompiled.download BoltexNif.Native --all --ignore-unavailable --print
-git add checksum-boltex_nif-X.Y.Z.exs
+git add checksum-Elixir.BoltexNif.Native.exs
 git commit -m "chore(release): checksum for vX.Y.Z"
 git push
 mix hex.publish
