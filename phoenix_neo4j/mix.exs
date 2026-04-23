@@ -63,7 +63,11 @@ defmodule PhoenixNeo4j.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:boltex_nif, path: "..", override: true}
+      {:boltex_nif, path: "..", override: true},
+      # Needed because we use the path dep (no precompiled binary) which
+      # forces the NIF to build from source — `rustler_precompiled` marks
+      # `:rustler` as optional, so it must be declared here too.
+      {:rustler, "~> 0.37"}
     ]
   end
 

@@ -11,10 +11,43 @@ you never have to manage messages yourself.
 Enables `neo4rs`'s `unstable-v1` feature set (Bolt v5 protocol, result summary,
 packstream serde). Targets `neo4rs 0.9.0-rc.9`, Rustler `~> 0.37`, Elixir 1.19.
 
-## Requirements
+## Installation
 
-- Rust toolchain (`rustc`/`cargo`), MSRV 1.81.
-- Elixir 1.19 / OTP 28 (the `mix.exs` matrix tested).
+Add to your `mix.exs` and run `mix deps.get` — that's it:
+
+```elixir
+def deps do
+  [
+    {:boltex_nif, "~> 0.1"}
+  ]
+end
+```
+
+**No Rust toolchain required.** `boltex_nif` ships precompiled NIFs
+(via [`rustler_precompiled`](https://hex.pm/packages/rustler_precompiled))
+for the following targets:
+
+| OS            | Architectures                                      |
+|---------------|----------------------------------------------------|
+| macOS         | aarch64 (Apple silicon), x86_64 (Intel)            |
+| Linux (glibc) | x86_64, aarch64                                    |
+| Linux (musl)  | x86_64, aarch64 (Alpine, scratch-based containers) |
+| Windows       | x86_64 (MSVC)                                      |
+
+For unsupported targets (e.g. 32-bit ARM, RISC-V), or to force a local
+build:
+
+```sh
+FORCE_BOLTEX_BUILD=1 mix deps.compile boltex_nif
+```
+
+Building from source needs Rust ≥ 1.81. Add `{:rustler, "~> 0.37"}` to
+your own deps when you force-build — it's marked `optional: true` here.
+
+## Requirements (runtime)
+
+- Elixir 1.19 / OTP 28 (current test matrix; older Elixir/OTP combos with
+  NIF 2.16 support are likely to work but aren't regression-tested).
 - A reachable Neo4j instance. A ready-to-use `docker-compose.yml` ships a
   Neo4j 5 community container:
 
@@ -167,3 +200,9 @@ Without `NEO4J_URI`, the suite skips the `:live` tag and runs zero tests.
 - Future: `element_id` support (needs the `bolt/structs/*` tree, not the
   classic `types/*` path we marshal today), `json`/`uuid` feature wiring, richer
   streaming (per-stream fetch_size override).
+
+## Releasing new versions (maintainers)
+
+See [`RELEASING.md`](RELEASING.md) for the cut-a-release checklist (bump
+version → tag → CI builds precompiled binaries → download checksums →
+`mix hex.publish`).
