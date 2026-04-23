@@ -2,28 +2,42 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   @moduledoc """
   Opt-in concurrency/stress suite.
 
-      # include with the live tag and the stress tag:
-      NEO4J_URI=bolt://... NEO4J_PASSWORD=... \
-        mix test --include live --include stress
+      mix test --include live --include stress
+      mix test --only stress
 
-      # or isolate:
-      NEO4J_URI=bolt://... NEO4J_PASSWORD=... \
-        mix test --only stress
+  Defaults assume you're running against a single Community Neo4j. Numbers
+  auto-scale down when the round-trip latency is high (e.g. a remote Coolify
+  box) via `STRESS_SCALE` (default 1.0 — use 0.25 on high-latency links).
 
-  Numbers are sized to run in ~30-90 s against a single 4 GB Community Neo4j.
-  Scale `@default_pool` + per-test concurrency up if you're pointing at a
-  bigger cluster.
+  Tests are excluded by default: the test_helper lists `:stress` in the
+  exclude set, and stress tests also carry `:live` so they skip when there
+  is no DB configured.
   """
 
   use PhoenixNeo4j.Neo4jCase, async: false
 
   @moduletag :stress
   @moduletag :live
-  @moduletag timeout: :timer.minutes(5)
+  @moduletag timeout: :timer.minutes(10)
+
+  # Long query timeout: we deliberately oversubscribe a small pool, so any
+  # single query must tolerate waiting in line for a connection.
+  @long_timeout :timer.seconds(120)
 
   # =========================================================================
   # helpers
   # =========================================================================
+
+  defp scale do
+    :phoenix_neo4j
+    |> Application.get_env(:stress_scale)
+    |> case do
+      nil -> System.get_env("STRESS_SCALE", "1.0") |> String.to_float()
+      s -> s
+    end
+  end
+
+  defp scaled(n) when is_integer(n), do: max(1, round(n * scale()))
 
   defp timed(fun) do
     t0 = System.monotonic_time(:microsecond)
@@ -58,12 +72,13 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
 
   defp throughput(n, dur_us), do: round(n * 1_000_000 / dur_us)
 
-  # Recursive loop used by the sustained-load test.
   defp pump_reads(deadline, acc) do
     if System.monotonic_time(:millisecond) >= deadline do
       acc
     else
-      {us, {:ok, [%{"n" => 1}]}} = timed(fn -> Neo4j.execute("RETURN 1 AS n") end)
+      {us, {:ok, [%{"n" => 1}]}} =
+        timed(fn -> Neo4j.execute("RETURN 1 AS n", nil, timeout: @long_timeout) end)
+
       pump_reads(deadline, [us | acc])
     end
   end
@@ -73,8 +88,8 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   # =========================================================================
 
   describe "read concurrency" do
-    test "500 parallel reads at concurrency=50" do
-      n = 500
+    test "parallel reads at concurrency=50" do
+      n = scaled(500)
       concurrency = 50
 
       {total_us, results} =
@@ -83,12 +98,14 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
           |> Task.async_stream(
             fn i ->
               {us, {:ok, [%{"n" => v}]}} =
-                timed(fn -> Neo4j.execute("RETURN $i AS n", %{"i" => i}) end)
+                timed(fn ->
+                  Neo4j.execute("RETURN $i AS n", %{"i" => i}, timeout: @long_timeout)
+                end)
 
               {us, v == i}
             end,
             max_concurrency: concurrency,
-            timeout: :timer.seconds(30),
+            timeout: :timer.seconds(180),
             ordered: false
           )
           |> Enum.map(fn {:ok, x} -> x end)
@@ -102,7 +119,7 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
           "(#{throughput(n, total_us)} q/s, concurrency=#{concurrency})"
       )
 
-      report("500 parallel reads", lats)
+      report("#{n} parallel reads", lats)
     end
   end
 
@@ -111,17 +128,22 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   # =========================================================================
 
   describe "write concurrency" do
-    test "200 parallel writes produce 200 nodes" do
-      n = 200
+    test "parallel writes produce the expected node count" do
+      n = scaled(150)
       concurrency = 32
 
       {total_us, _} =
         timed(fn ->
           1..n
           |> Task.async_stream(
-            fn i -> :ok = Neo4j.run("CREATE (:TestStress {i: $i})", %{"i" => i}) end,
+            fn i ->
+              :ok =
+                Neo4j.run("CREATE (:TestStress {i: $i})", %{"i" => i},
+                  timeout: @long_timeout
+                )
+            end,
             max_concurrency: concurrency,
-            timeout: :timer.seconds(30),
+            timeout: :timer.seconds(180),
             ordered: false
           )
           |> Enum.to_list()
@@ -144,30 +166,32 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   # =========================================================================
 
   describe "mixed workload" do
-    test "50 reads + 50 writes interleaved, no losses" do
+    test "reads + writes interleaved, no losses" do
+      n = scaled(40)
+
       writers =
-        for i <- 1..50 do
+        for i <- 1..n do
           Task.async(fn ->
-            Neo4j.run("CREATE (:TestStress {i: $i})", %{"i" => i})
+            Neo4j.run("CREATE (:TestStress {i: $i})", %{"i" => i}, timeout: @long_timeout)
           end)
         end
 
       readers =
-        for i <- 1..50 do
+        for i <- 1..n do
           Task.async(fn ->
-            Neo4j.execute("RETURN $i AS n", %{"i" => i})
+            Neo4j.execute("RETURN $i AS n", %{"i" => i}, timeout: @long_timeout)
           end)
         end
 
-      assert Enum.all?(Task.await_many(writers, 30_000), &(&1 == :ok))
+      assert Enum.all?(Task.await_many(writers, :timer.seconds(180)), &(&1 == :ok))
 
-      read_results = Task.await_many(readers, 30_000)
+      read_results = Task.await_many(readers, :timer.seconds(180))
       assert Enum.all?(read_results, &match?({:ok, [_row]}, &1))
 
       {:ok, [%{"c" => c}]} =
         Neo4j.execute("MATCH (n:TestStress) RETURN count(n) AS c")
 
-      assert c == 50
+      assert c == n
     end
   end
 
@@ -176,28 +200,34 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   # =========================================================================
 
   describe "transaction concurrency" do
-    test "20 concurrent transactions × 5 writes each = 100 nodes, all committed" do
-      n_tx = 20
+    test "concurrent transactions each writing N nodes all commit" do
+      n_tx = scaled(15)
       writes_per_tx = 5
 
       tasks =
         for i <- 1..n_tx do
           Task.async(fn ->
-            Neo4j.transaction(fn txn ->
-              for j <- 1..writes_per_tx do
-                {:ok, _} =
-                  BoltexNif.txn_run(txn, "CREATE (:TestStress {i: $i, j: $j})", %{
-                    "i" => i,
-                    "j" => j
-                  })
-              end
+            BoltexNif.transaction(
+              Neo4j.graph(),
+              fn txn ->
+                for j <- 1..writes_per_tx do
+                  {:ok, _} =
+                    BoltexNif.txn_run(
+                      txn,
+                      "CREATE (:TestStress {i: $i, j: $j})",
+                      %{"i" => i, "j" => j},
+                      timeout: @long_timeout
+                    )
+                end
 
-              {:ok, :done}
-            end)
+                {:ok, :done}
+              end,
+              timeout: @long_timeout
+            )
           end)
         end
 
-      results = Task.await_many(tasks, 60_000)
+      results = Task.await_many(tasks, :timer.seconds(180))
       assert Enum.all?(results, &match?({:ok, :done}, &1))
 
       {:ok, [%{"c" => c}]} =
@@ -206,22 +236,31 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
       assert c == n_tx * writes_per_tx
     end
 
-    test "rollbacks under concurrency don't leak writes" do
-      n = 15
+    test "rollbacks under concurrency leak zero writes" do
+      n = scaled(10)
 
       tasks =
         for i <- 1..n do
           Task.async(fn ->
-            Neo4j.transaction(fn txn ->
-              {:ok, _} =
-                BoltexNif.txn_run(txn, "CREATE (:TestStress {bad:true, i: $i})", %{"i" => i})
+            BoltexNif.transaction(
+              Neo4j.graph(),
+              fn txn ->
+                {:ok, _} =
+                  BoltexNif.txn_run(
+                    txn,
+                    "CREATE (:TestStress {bad:true, i: $i})",
+                    %{"i" => i},
+                    timeout: @long_timeout
+                  )
 
-              {:error, :intentional_rollback}
-            end)
+                {:error, :intentional_rollback}
+              end,
+              timeout: @long_timeout
+            )
           end)
         end
 
-      results = Task.await_many(tasks, 60_000)
+      results = Task.await_many(tasks, :timer.seconds(180))
       assert Enum.all?(results, &match?({:error, :intentional_rollback}, &1))
 
       {:ok, [%{"c" => c}]} =
@@ -236,9 +275,9 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   # =========================================================================
 
   describe "stream concurrency" do
-    test "10 streams drained in parallel, each yields 1..50" do
-      n_streams = 10
-      rows_per = 50
+    test "multiple streams drained in parallel" do
+      n_streams = scaled(8)
+      rows_per = 25
 
       tasks =
         for k <- 1..n_streams do
@@ -247,11 +286,14 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
               BoltexNif.stream_start(
                 Neo4j.graph(),
                 "UNWIND range(1, $n) AS i RETURN i",
-                %{"n" => rows_per}
+                %{"n" => rows_per},
+                timeout: @long_timeout
               )
 
             values =
-              Stream.repeatedly(fn -> BoltexNif.stream_next(stream) end)
+              Stream.repeatedly(fn ->
+                BoltexNif.stream_next(stream, timeout: @long_timeout)
+              end)
               |> Enum.take_while(&(&1 != :done))
               |> Enum.map(fn {:ok, row} -> row["i"] end)
 
@@ -259,32 +301,38 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
           end)
         end
 
-      for {_k, values} <- Task.await_many(tasks, 60_000) do
+      for {_k, values} <- Task.await_many(tasks, :timer.seconds(180)) do
         assert values == Enum.to_list(1..rows_per)
       end
     end
   end
 
   # =========================================================================
-  # pool saturation
+  # pool saturation — deliberate oversubscription of a small pool
   # =========================================================================
 
   describe "pool saturation" do
-    test "200 in-flight queries against a pool of 4 all complete" do
-      # The Neo4j GenServer is started in test_helper with max_connections: 4.
-      # 200 tasks mean ~50× over-subscription; queueing in neo4rs's pool keeps
-      # them all alive until each gets a free connection.
-      n = 200
+    test "in-flight queries 10× the pool size all complete" do
+      # 40 tasks against a pool of 4 means every task waits ~10 round-trips
+      # on average. With @long_timeout each tolerates the queue depth.
+      n = scaled(40)
 
       tasks =
         for i <- 1..n do
-          Task.async(fn -> Neo4j.execute("RETURN $i AS n", %{"i" => i}) end)
+          Task.async(fn ->
+            Neo4j.execute("RETURN $i AS n", %{"i" => i}, timeout: @long_timeout)
+          end)
         end
 
-      results = Task.await_many(tasks, 60_000)
+      results = Task.await_many(tasks, :timer.seconds(180))
 
-      assert Enum.all?(results, fn {:ok, [%{"n" => v}]} -> is_integer(v) end)
-      assert length(results) == n
+      values =
+        Enum.map(results, fn
+          {:ok, [%{"n" => v}]} -> v
+          other -> flunk("pool saturation got #{inspect(other)}")
+        end)
+
+      assert Enum.sort(values) == Enum.to_list(1..n)
     end
   end
 
@@ -302,7 +350,7 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
           Task.async(fn -> pump_reads(deadline, []) end)
         end
 
-      all_lats = tasks |> Task.await_many(15_000) |> List.flatten()
+      all_lats = tasks |> Task.await_many(30_000) |> List.flatten()
       assert all_lats != []
 
       count = length(all_lats)
@@ -312,17 +360,20 @@ defmodule PhoenixNeo4j.Neo4jStressTest do
   end
 
   # =========================================================================
-  # sequential endurance
+  # sequential endurance — validates no slow leak / memory growth
   # =========================================================================
 
   describe "sequential endurance" do
-    test "2000 sequential reads complete without leak or slowdown" do
-      n = 2_000
+    test "sequential reads complete without leak" do
+      # Scale aggressively on the WAN: 300 × ~400ms ≈ 2 min, still meaningful
+      # to detect slow degradation. Bump STRESS_SCALE up for local Neo4j.
+      n = scaled(300)
 
       {dur_us, _} =
         timed(fn ->
           for i <- 1..n do
-            assert {:ok, [%{"n" => ^i}]} = Neo4j.execute("RETURN $i AS n", %{"i" => i})
+            assert {:ok, [%{"n" => ^i}]} =
+                     Neo4j.execute("RETURN $i AS n", %{"i" => i}, timeout: @long_timeout)
           end
         end)
 

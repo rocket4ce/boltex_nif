@@ -30,12 +30,15 @@ defmodule PhoenixNeo4j.Neo4j do
   end
 
   @doc "Run a Cypher query, discarding rows."
-  @spec run(String.t(), map() | nil) :: :ok | {:error, term()}
-  def run(cypher, params \\ nil), do: BoltexNif.run(graph(), cypher, params)
+  @spec run(String.t(), map() | nil, keyword()) :: :ok | {:error, term()}
+  def run(cypher, params \\ nil, opts \\ []),
+    do: BoltexNif.run(graph(), cypher, params, opts)
 
   @doc "Run a Cypher query, returning all rows."
-  @spec execute(String.t(), map() | nil) :: {:ok, [map()]} | {:error, term()}
-  def execute(cypher, params \\ nil), do: BoltexNif.execute(graph(), cypher, params)
+  @spec execute(String.t(), map() | nil, keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def execute(cypher, params \\ nil, opts \\ []),
+    do: BoltexNif.execute(graph(), cypher, params, opts)
 
   @doc "Open a transaction (wraps `BoltexNif.begin_transaction/2`)."
   defdelegate begin_transaction(opts \\ []), to: BoltexNif, as: :begin_transaction
