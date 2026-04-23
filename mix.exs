@@ -62,9 +62,51 @@ defmodule BoltexNif.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "CHANGELOG.md"],
       source_url: @source_url,
-      source_ref: "v#{@version}"
+      source_ref: "v#{@version}",
+      formatters: ["html"],
+      extras: [
+        "README.md": [title: "Overview"],
+        "CHANGELOG.md": [title: "Changelog"],
+        "RELEASING.md": [title: "Releasing (maintainers)"],
+        "LICENSE": [title: "License"]
+      ],
+      groups_for_extras: [
+        Guides: ~r/README\.md/,
+        Reference: ~r/(CHANGELOG|RELEASING|LICENSE)\.md/
+      ],
+      groups_for_modules: [
+        "Core API": [
+          BoltexNif
+        ],
+        "Graph types": [
+          BoltexNif.Node,
+          BoltexNif.Relationship,
+          BoltexNif.UnboundRelationship,
+          BoltexNif.Path,
+          BoltexNif.Point
+        ],
+        "Temporal types": [
+          BoltexNif.Duration,
+          BoltexNif.Time,
+          BoltexNif.DateTime,
+          BoltexNif.DateTimeZoneId
+        ],
+        "Results & diagnostics": [
+          BoltexNif.Summary,
+          BoltexNif.Summary.Counters,
+          BoltexNif.Notification,
+          BoltexNif.Notification.InputPosition,
+          BoltexNif.Neo4jError
+        ]
+      ],
+      groups_for_docs: [
+        "Connection": &(&1[:group] == :connection),
+        "Auto-commit queries": &(&1[:group] == :auto_commit),
+        "Transactions": &(&1[:group] == :transactions),
+        "Streaming": &(&1[:group] == :streaming)
+      ],
+      nest_modules_by_prefix: [BoltexNif]
     ]
   end
 

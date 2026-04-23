@@ -49,6 +49,7 @@ defmodule BoltexNif do
         * `:skip_validation` — bypass verification (NOT for production)
     * `:timeout` — milliseconds to wait for the handshake (default 15 000)
   """
+  @doc group: :connection
   @spec connect(config()) :: {:ok, graph()} | {:error, term()}
   def connect(opts) do
     opts = normalize(opts)
@@ -90,7 +91,14 @@ defmodule BoltexNif do
   # Auto-commit queries
   # ===========================================================================
 
-  @doc "Run a query in auto-commit mode, discarding any rows."
+  @doc """
+  Run a query in auto-commit mode, discarding any rows.
+
+  `params` is a map of string (or atom) keys to Elixir terms that are
+  marshalled to Bolt values — see the type table in the
+  [Overview](readme.html#type-mapping).
+  """
+  @doc group: :auto_commit
   @spec run(graph(), String.t(), params(), keyword()) :: :ok | {:error, term()}
   def run(graph, cypher, params \\ nil, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -98,7 +106,12 @@ defmodule BoltexNif do
     await(ref, timeout)
   end
 
-  @doc "Run a query in auto-commit mode and return the `%BoltexNif.Summary{}`."
+  @doc """
+  Run a query in auto-commit mode and return a `BoltexNif.Summary` struct
+  with counters (nodes/relationships created, properties set, …),
+  notifications and the query bookmark (Bolt v5).
+  """
+  @doc group: :auto_commit
   @spec run_with_summary(graph(), String.t(), params(), keyword()) ::
           {:ok, BoltexNif.Summary.t()} | {:error, term()}
   def run_with_summary(graph, cypher, params \\ nil, opts \\ []) do
@@ -107,7 +120,14 @@ defmodule BoltexNif do
     await(ref, timeout)
   end
 
-  @doc "Run a query in auto-commit mode, collecting all rows."
+  @doc """
+  Run a query in auto-commit mode, collecting all rows into a list of maps.
+
+  Keys in each row are the `AS` aliases from the Cypher `RETURN` clause.
+  For large result sets, prefer `stream_start/4` to avoid buffering
+  everything in memory.
+  """
+  @doc group: :auto_commit
   @spec execute(graph(), String.t(), params(), keyword()) ::
           {:ok, [row()]} | {:error, term()}
   def execute(graph, cypher, params \\ nil, opts \\ []) do
@@ -120,7 +140,13 @@ defmodule BoltexNif do
   # Transactions
   # ===========================================================================
 
-  @doc "Start an explicit transaction. Must be finished with `commit/2` or `rollback/2`."
+  @doc """
+  Start an explicit transaction.
+
+  The returned handle must be finished with `commit/2` or `rollback/2`; use
+  `transaction/3` for the recommended scope-and-commit pattern.
+  """
+  @doc group: :transactions
   @spec begin_transaction(graph(), keyword()) :: {:ok, txn()} | {:error, term()}
   def begin_transaction(graph, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -128,7 +154,8 @@ defmodule BoltexNif do
     await(ref, timeout)
   end
 
-  @doc "Run a query inside a transaction, returning its `%BoltexNif.Summary{}`."
+  @doc "Run a query inside a transaction, returning its `BoltexNif.Summary` struct."
+  @doc group: :transactions
   @spec txn_run(txn(), String.t(), params(), keyword()) ::
           {:ok, BoltexNif.Summary.t()} | {:error, term()}
   def txn_run(txn, cypher, params \\ nil, opts \\ []) do
@@ -138,6 +165,7 @@ defmodule BoltexNif do
   end
 
   @doc "Run a query inside a transaction and collect all rows."
+  @doc group: :transactions
   @spec txn_execute(txn(), String.t(), params(), keyword()) ::
           {:ok, [row()]} | {:error, term()}
   def txn_execute(txn, cypher, params \\ nil, opts \\ []) do
@@ -150,6 +178,7 @@ defmodule BoltexNif do
   Commit a transaction. Returns `{:ok, bookmark}` on Bolt v5 (the bookmark may
   be `nil`) or plain `:ok` otherwise.
   """
+  @doc group: :transactions
   @spec commit(txn(), keyword()) :: :ok | {:ok, String.t() | nil} | {:error, term()}
   def commit(txn, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -158,6 +187,7 @@ defmodule BoltexNif do
   end
 
   @doc "Roll back a transaction."
+  @doc group: :transactions
   @spec rollback(txn(), keyword()) :: :ok | {:error, term()}
   def rollback(txn, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -168,7 +198,15 @@ defmodule BoltexNif do
   @doc """
   Convenience wrapper: `begin_transaction` → run `fun`, commit on success,
   rollback on `{:error, _}` or raise.
+
+  The function value you return from `fun` drives the transaction:
+
+    * `{:ok, value}` — commit, result is `{:ok, value}`.
+    * `{:error, reason}` — rollback, result is `{:error, reason}`.
+    * any other term — commit, result is `{:ok, term}`.
+    * a raised exception — rollback, then re-raise.
   """
+  @doc group: :transactions
   @spec transaction(graph(), (txn() -> {:ok, any()} | {:error, any()} | any()), keyword()) ::
           {:ok, any()} | {:error, term()}
   def transaction(graph, fun, opts \\ []) do
@@ -206,6 +244,7 @@ defmodule BoltexNif do
   # ===========================================================================
 
   @doc "Start a lazy row stream for `cypher`. Consume with `stream_next/2`."
+  @doc group: :streaming
   @spec stream_start(graph(), String.t(), params(), keyword()) ::
           {:ok, stream()} | {:error, term()}
   def stream_start(graph, cypher, params \\ nil, opts \\ []) do
@@ -215,6 +254,7 @@ defmodule BoltexNif do
   end
 
   @doc "Fetch the next row. Returns `{:ok, row}`, `:done`, or `{:error, reason}`."
+  @doc group: :streaming
   @spec stream_next(stream(), keyword()) :: {:ok, row()} | :done | {:error, term()}
   def stream_next(stream, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
@@ -223,6 +263,7 @@ defmodule BoltexNif do
   end
 
   @doc "Drop a stream eagerly (without consuming remaining rows)."
+  @doc group: :streaming
   @spec stream_close(stream(), keyword()) :: :ok
   def stream_close(stream, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
