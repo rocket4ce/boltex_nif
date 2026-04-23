@@ -31,11 +31,10 @@ for the following targets:
 |---------------|----------------------------------------------------|
 | macOS         | aarch64 (Apple silicon), x86_64 (Intel)            |
 | Linux (glibc) | x86_64, aarch64                                    |
-| Linux (musl)  | x86_64, aarch64 (Alpine, scratch-based containers) |
 | Windows       | x86_64 (MSVC)                                      |
 
-For unsupported targets (e.g. 32-bit ARM, RISC-V), or to force a local
-build:
+For unsupported targets (musl/Alpine, 32-bit ARM, RISC-V, …) or to force a
+local build:
 
 ```sh
 FORCE_BOLTEX_BUILD=1 mix deps.compile boltex_nif

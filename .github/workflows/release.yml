@@ -32,14 +32,17 @@ jobs:
       fail-fast: false
       matrix:
         nif: ["2.17", "2.16"]
+        # musl targets are intentionally dropped for v0.1.0 because the
+        # default `cross` Docker images can't emit `cdylib` on musl without
+        # a per-target `Cross.toml` + `RUSTFLAGS="-C target-feature=-crt-static"`.
+        # Alpine / scratch users can install with `FORCE_BOLTEX_BUILD=1`.
+        # Re-introduce once we ship a Cross.toml tested for the matrix.
         job:
-          - { target: aarch64-apple-darwin,        os: macos-14 }
-          - { target: x86_64-apple-darwin,         os: macos-13 }
-          - { target: x86_64-unknown-linux-gnu,    os: ubuntu-22.04 }
-          - { target: x86_64-unknown-linux-musl,   os: ubuntu-22.04, use-cross: true }
-          - { target: aarch64-unknown-linux-gnu,   os: ubuntu-22.04, use-cross: true }
-          - { target: aarch64-unknown-linux-musl,  os: ubuntu-22.04, use-cross: true }
-          - { target: x86_64-pc-windows-msvc,      os: windows-2022 }
+          - { target: aarch64-apple-darwin,      os: macos-14 }
+          - { target: x86_64-apple-darwin,       os: macos-13 }
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04, use-cross: true }
+          - { target: x86_64-pc-windows-msvc,    os: windows-2022 }
 
     steps:
       - uses: actions/checkout@v4
@@ -47,8 +50,17 @@ jobs:
       - name: Read project version from mix.exs
         id: version
         run: |
-          VERSION=$(grep -E '^\s*version:' mix.exs | head -n1 \
-            | sed -E 's/.*version: "([^"]+)".*/\1/')
+          # Extract the `@version "X.Y.Z"` module attribute. This is the
+          # single source of truth referenced by `version: @version` in the
+          # project/0 function, so grepping the attribute is more robust
+          # than grepping the keyword list (which can legitimately say
+          # `version: @version,` — no quoted string to match).
+          VERSION=$(grep -E '^\s*@version\s+"' mix.exs | head -n1 \
+            | sed -E 's/.*@version[[:space:]]+"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not extract @version from mix.exs"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Project version: $VERSION"
 
@@ -92,7 +104,7 @@ jobs:
           echo "Artifacts present:"
           find artifacts -type f -name '*.tar.gz' | sort
           count=$(find artifacts -type f -name '*.tar.gz' | wc -l)
-          expected=14   # 7 targets × 2 NIF versions
+          expected=10   # 5 targets × 2 NIF versions
           if [ "$count" -ne "$expected" ]; then
             echo "::error::Expected $expected artifacts, found $count"
             exit 1

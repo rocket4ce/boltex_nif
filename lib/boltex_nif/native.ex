@@ -23,13 +23,13 @@ defmodule BoltexNif.Native do
       System.get_env("FORCE_BOLTEX_BUILD") in ["1", "true"] or
         not File.exists?(checksum_path),
     nif_versions: ["2.16", "2.17"],
+    # musl variants are not shipped for v0.1.0 (build-from-source path is
+    # available via FORCE_BOLTEX_BUILD=1 on Alpine / scratch containers).
     targets: [
       "aarch64-apple-darwin",
       "x86_64-apple-darwin",
       "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-linux-musl",
       "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-linux-musl",
       "x86_64-pc-windows-msvc"
     ]
 
