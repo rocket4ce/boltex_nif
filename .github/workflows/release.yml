@@ -67,6 +67,15 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Project version: $VERSION"
 
+      # Install the Rust std for the target being built. Skipped for cross
+      # jobs — `cross` handles std inside its own Docker image. For direct
+      # `cargo build` jobs (especially cross-compiling x86_64-apple-darwin
+      # from an Apple silicon runner) this is what avoids the
+      # `E0463: can't find crate for core` error.
+      - name: Add Rust target
+        if: ${{ !matrix.job.use-cross }}
+        run: rustup target add ${{ matrix.job.target }}
+
       - name: Build the NIF
         id: build
         uses: philss/rustler-precompiled-action@v1.1.4
