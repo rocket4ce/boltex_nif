@@ -36,8 +36,13 @@ jobs:
         # Alpine / scratch users can install with `FORCE_BOLTEX_BUILD=1`.
         # Re-introduce once we ship a Cross.toml tested for the matrix.
         job:
+          # Both macOS targets run on `macos-14` (Apple silicon). The Intel
+          # target is cross-compiled — Xcode on the ARM runner ships a
+          # universal SDK, and `rustup target add x86_64-apple-darwin`
+          # provides the Rust std. This dodges the slow/scarce `macos-13`
+          # (Intel) runner queue that GitHub keeps shrinking.
           - { target: aarch64-apple-darwin,      os: macos-14 }
-          - { target: x86_64-apple-darwin,       os: macos-13 }
+          - { target: x86_64-apple-darwin,       os: macos-14 }
           - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04 }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04, use-cross: true }
           - { target: x86_64-pc-windows-msvc,    os: windows-2022 }
