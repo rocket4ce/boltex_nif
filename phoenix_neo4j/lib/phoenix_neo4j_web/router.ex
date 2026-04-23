@@ -18,6 +18,10 @@ defmodule PhoenixNeo4jWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+
+    get "/neo4j", Neo4jController, :index
+    post "/neo4j/greeter", Neo4jController, :create
+    delete "/neo4j/greeter", Neo4jController, :delete_all
   end
 
   # Other scopes may use custom stacks.

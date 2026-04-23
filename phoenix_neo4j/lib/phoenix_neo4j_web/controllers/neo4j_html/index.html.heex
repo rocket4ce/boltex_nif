@@ -1,0 +1,87 @@
+<Layouts.flash_group flash={@flash} />
+
+<div class="mx-auto max-w-3xl px-6 py-10 space-y-8">
+  <header class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight">Neo4j demo</h1>
+      <p class="text-base-content/70 text-sm mt-1">
+        Powered by <code class="font-mono">boltex_nif</code> + Rustler → <code class="font-mono">neo4rs</code>.
+      </p>
+    </div>
+    <Layouts.theme_toggle />
+  </header>
+
+  <%= if @error do %>
+    <div class="alert alert-error">
+      <span>{@error}</span>
+    </div>
+  <% end %>
+
+  <section class="card bg-base-200 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Add a greeter</h2>
+      <p class="text-sm text-base-content/70">
+        Creates a <code>:Greeter</code> node with the given <code>name</code> and a
+        <code>timestamp()</code> property.
+      </p>
+
+      <form method="post" action={~p"/neo4j/greeter"} class="mt-4 flex gap-3">
+        <input
+          type="hidden"
+          name="_csrf_token"
+          value={Plug.CSRFProtection.get_csrf_token()}
+        />
+        <input
+          type="text"
+          name="greeter[name]"
+          placeholder="Ada"
+          required
+          class="input input-bordered w-full"
+        />
+        <button type="submit" class="btn btn-primary">Create</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="card bg-base-200 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title">
+          Greeters <span class="badge badge-neutral">{@count}</span>
+        </h2>
+
+        <%= if @count > 0 do %>
+          <form method="post" action={~p"/neo4j/greeter"}>
+            <input
+              type="hidden"
+              name="_csrf_token"
+              value={Plug.CSRFProtection.get_csrf_token()}
+            />
+            <input type="hidden" name="_method" value="delete" />
+            <button type="submit" class="btn btn-ghost btn-sm">Delete all</button>
+          </form>
+        <% end %>
+      </div>
+
+      <%= if @greeters == [] do %>
+        <p class="text-base-content/60 mt-2">No greeters yet.</p>
+      <% else %>
+        <ul class="divide-y divide-base-300 mt-2">
+          <%= for greeter <- @greeters do %>
+            <li class="py-3 flex items-center justify-between">
+              <div>
+                <p class="font-medium">{greeter.properties["name"]}</p>
+                <p class="text-xs text-base-content/60">
+                  id={greeter.id} · inserted_at={format_ts(greeter.properties["inserted_at"])}
+                </p>
+              </div>
+              <span class="text-xs text-base-content/60">
+                {greeter.labels |> Enum.join(":")}
+              </span>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </div>
+  </section>
+</div>
