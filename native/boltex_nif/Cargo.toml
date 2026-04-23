@@ -18,6 +18,17 @@ tokio = { version = "1", features = ["full"] }
 once_cell = "1.19"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 
+# NIF version features required by rustler_precompiled since Rustler 0.30.
+# The CI `rustler-precompiled-action` builds with:
+#   cargo build --release --no-default-features --features nif_version_2_XX
+# so the crate's own default is bypassed and only the explicitly requested
+# rustler NIF version is activated. Features cascade: 2.17 ⊇ 2.16 ⊇ 2.15, etc.
+[features]
+default = ["nif_version_2_15"]
+nif_version_2_15 = ["rustler/nif_version_2_15"]
+nif_version_2_16 = ["rustler/nif_version_2_16"]
+nif_version_2_17 = ["rustler/nif_version_2_17"]
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
