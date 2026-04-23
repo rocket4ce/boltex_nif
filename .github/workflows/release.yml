@@ -1,20 +1,12 @@
 name: Build precompiled NIFs
 
-# Triggers:
-#   - tag push (`v*`) → compiles all targets and drafts a GitHub Release.
-#   - push to `main` → compiles all targets as a smoke check (no upload).
-#   - manual dispatch → same as tag push but into a draft release of the
-#     branch being dispatched from.
+# Only triggered by tag pushes that match `v*` (e.g. `v0.1.0`, `v1.2.3-rc1`).
+# Nothing else — no branch pushes, no PRs, no manual dispatch — so the
+# matrix and the GitHub Release upload only run when you're actually
+# cutting a release.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/release.yml"
-      - "native/**"
-      - "mix.exs"
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,6 +16,12 @@ jobs:
   build_release:
     name: ${{ matrix.job.target }} (NIF ${{ matrix.nif }})
     runs-on: ${{ matrix.job.os }}
+    # `softprops/action-gh-release` needs write access to repository contents
+    # to create/edit the release and upload assets. Default permission for
+    # GITHUB_TOKEN is `contents: read`, which is why v0.1.0 first failed with
+    # "Resource not accessible by integration".
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
@@ -82,7 +80,6 @@ jobs:
           path: ${{ steps.build.outputs.file-path }}
 
       - name: Publish archive to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
@@ -93,7 +90,7 @@ jobs:
   verify_matrix:
     name: Verify all targets built
     needs: build_release
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: always()
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4
